@@ -1,6 +1,9 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import type { Device, Alarm, ModbusRegister } from '../types'
+import axios from 'axios'
+import type { Device, Alarm, ModbusRegister, SelfCheckResponse } from '../types'
+
+const API_BASE = 'http://localhost:8000/api'
 
 export const useModbusStore = defineStore('modbus', () => {
   const devices = ref<Device[]>([])
@@ -9,6 +12,9 @@ export const useModbusStore = defineStore('modbus', () => {
   const isPolling = ref(false)
   const pollInterval = ref(1000)
   const selectedDevice = ref<Device | null>(null)
+  const isSelfChecking = ref(false)
+  const selfCheckResult = ref<SelfCheckResponse | null>(null)
+  const showSelfCheckDialog = ref(false)
 
   const criticalAlarms = computed(() => alarms.value.filter(a => a.level === 'critical' && !a.acknowledged))
   const onlineDevices = computed(() => devices.value.filter(d => d.online))
@@ -49,6 +55,34 @@ export const useModbusStore = defineStore('modbus', () => {
     selectedDevice.value = devices.value[0]
   }
 
+  async function runSelfCheck(): Promise<boolean> {
+    isSelfChecking.value = true
+    selfCheckResult.value = null
+    try {
+      const response = await axios.get<SelfCheckResponse>(`${API_BASE}/modbus/self-check`, { timeout: 15000 })
+      selfCheckResult.value = response.data
+      showSelfCheckDialog.value = true
+      return response.data.overallStatus === 'passed'
+    } catch (error) {
+      console.error('Self-check failed:', error)
+      selfCheckResult.value = {
+        overallStatus: 'failed',
+        totalDevices: 0,
+        passedDevices: 0,
+        failedDevices: 0,
+        results: []
+      }
+      showSelfCheckDialog.value = true
+      return false
+    } finally {
+      isSelfChecking.value = false
+    }
+  }
+
+  function closeSelfCheckDialog() {
+    showSelfCheckDialog.value = false
+  }
+
   function simulatePoll() {
     for (const dev of devices.value) {
       if (!dev.online) continue
@@ -65,7 +99,6 @@ export const useModbusStore = defineStore('modbus', () => {
             historyData.value[key].time.shift()
             historyData.value[key].values.shift()
           }
-          // Check thresholds
           if (reg.name === '温度' && reg.value > 28) {
             alarms.value.unshift({
               id: `a_${Date.now()}`, deviceId: dev.id, register: reg.name,
@@ -92,7 +125,7 @@ export const useModbusStore = defineStore('modbus', () => {
 
   return {
     devices, alarms, historyData, isPolling, pollInterval, selectedDevice,
-    criticalAlarms, onlineDevices,
-    initMockDevices, simulatePoll, acknowledgeAlarm, toggleDevice
+    criticalAlarms, onlineDevices, isSelfChecking, selfCheckResult, showSelfCheckDialog,
+    initMockDevices, simulatePoll, acknowledgeAlarm, toggleDevice, runSelfCheck, closeSelfCheckDialog
   }
 })

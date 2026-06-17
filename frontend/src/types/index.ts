@@ -26,3 +26,26 @@ export interface Alarm {
   timestamp: number
   acknowledged: boolean
 }
+
+export interface SelfCheckItem {
+  name: string
+  status: 'passed' | 'failed' | 'skipped'
+  message: string
+  details?: string
+}
+
+export interface DeviceSelfCheckResult {
+  deviceId: string
+  deviceName: string
+  overallStatus: 'passed' | 'failed'
+  connectivityChecks: SelfCheckItem[]
+  configChecks: SelfCheckItem[]
+}
+
+export interface SelfCheckResponse {
+  overallStatus: 'passed' | 'failed' | 'partial'
+  totalDevices: number
+  passedDevices: number
+  failedDevices: number
+  results: DeviceSelfCheckResult[]
+}
